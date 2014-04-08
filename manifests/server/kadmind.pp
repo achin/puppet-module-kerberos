@@ -15,6 +15,7 @@ class kerberos::server::kadmind {
   }
 
   service { 'krb5-admin-server':
+    name       => $kerberos::params::kadmin_service_name,
     ensure     => running,
     enable     => true,
     hasrestart => true,

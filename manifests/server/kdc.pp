@@ -52,6 +52,7 @@ class kerberos::server::kdc(
   $realm = 'EXAMPLE.COM',
   $master_password,
   $acl = { "*/admin@$realm" => '*' },
+  $kdc_required_dirs = $kerberos::params::kdc_required_dirs,
   $kdc_conf_path = $kerberos::params::kdc_conf_path,
   $kadm5_acl_path = $kerberos::params::kadm5_acl_path,
   $krb5kdc_database_path = $kerberos::params::krb5kdc_database_path,
@@ -75,8 +76,9 @@ class kerberos::server::kdc(
     group   => 0,
   }
 
-  file { "/etc/krb5kdc":
+  file { $kdc_required_dirs:
     ensure => "directory",
+    before => File['kadm5.acl'],
   }
 
   file { 'kadm5.acl':
@@ -86,7 +88,6 @@ class kerberos::server::kdc(
     mode    => '0644',
     owner   => 0,
     group   => 0,
-    require => File['/etc/krb5kdc'],
   }
 
   file { "/var/lib/krb5kdc":
@@ -96,7 +97,7 @@ class kerberos::server::kdc(
   exec { "create_krb5kdc_principal":
     command => "/usr/sbin/kdb5_util -r $realm -P $master_password create -s",
     creates => "$krb5kdc_database_path",
-    require => [ File['/var/lib/krb5kdc'], File['krb5.conf'], File['kdc.conf'], Exec["initialize_dev_random"], ],
+    require => [ File['/var/lib/krb5kdc'], File['krb5.conf'], File['kdc.conf'], ],
   }
 
   # Look up our users in hiera.  Create a principal for each one listed
@@ -106,9 +107,9 @@ class kerberos::server::kdc(
 
   # Look up our trusted realms from hiera.  Create trusted principal pairs
   # for each trusted realm that is not the realm of the current server.
-  $trusted = hiera('trusted_realms', [])
+  $trusted = hiera('trusted_realms', {})
   $trusted_realms = delete($trusted['realms'], $realm)
-  if $trusted {
+  if !empty($trusted) {
     kerberos::trust { $trusted_realms:
       this_realm => $realm,
       password => $trusted['password'],
@@ -116,6 +117,7 @@ class kerberos::server::kdc(
   }
 
   service { 'krb5-kdc':
+    name       => $kerberos::params::kdc_service_name,
     ensure     => running,
     enable     => true,
     hasrestart => true,
